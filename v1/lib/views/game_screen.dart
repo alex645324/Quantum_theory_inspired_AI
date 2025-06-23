@@ -2,6 +2,7 @@
 // Main game interface with AppBar and body layout
 
 import 'package:flutter/material.dart';
+
 import 'package:provider/provider.dart';
 import '../viewmodels/game_view_model.dart';
 import '../models/game_state.dart';
@@ -22,8 +23,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     super.dispose();
   }
 
-
-  
   // Calculate main board scale based on current animation state
   double _getMainBoardScale(animationViewModel) {
     double baseScale = 1.0 + (animationViewModel.mainBoardPulseAnimation.value * 0.05);
@@ -44,134 +43,127 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (context) => GameViewModel(this),
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF8F9FA), // Cool, soft white background
-        body: LayoutBuilder(
-          builder: (context, constraints) {
-            // Calculate sizes based on screen constraints
-            final screenSize = (constraints.maxWidth < constraints.maxHeight
-                    ? constraints.maxWidth
-                    : constraints.maxHeight) * 0.85;
-            
-            // Make all boards the same size
-            final boardSize = screenSize * 0.15; // All boards same size
-            final mainBoardSize = boardSize * 2; // Main board is larger
-            
-            return Consumer<GameViewModel>(
-              builder: (context, gameViewModel, child) {
-                return AnimatedBuilder(
-                  animation: gameViewModel.animationViewModel,
-                  builder: (context, child) {
-                    final animationViewModel = gameViewModel.animationViewModel;
-                    final isEmerging = animationViewModel.isEmerging;
-                    final isFloating = animationViewModel.isFloating;
-                    final emergenceScale = animationViewModel.emergenceScaleAnimation.value;
-                    
-                    // Start deliberation after emergence completes
-                    if (!gameViewModel.isPlayerTurn && emergenceScale >= 1.0 && !animationViewModel.isShrinking) {
-                      Future.delayed(Duration(milliseconds: animationViewModel.settings.deliberationDelayDuration), () {
-                        if (mounted && !animationViewModel.isShrinking) {
-                          animationViewModel.startDeliberationSequence();
-                        }
-                      });
-                    }
-                    
-                                        return Stack(
-                      children: [
-                        // Background dimming overlay
-                        if (animationViewModel.isDimming)
-                          Positioned.fill(
-                            child: Container(
-                              color: Colors.black.withOpacity(
-                                animationViewModel.isFinalUndimming 
-                                  ? animationViewModel.dimmingAnimation.value * animationViewModel.finalUndimAnimation.value
-                                  : animationViewModel.dimmingAnimation.value
+      child: Consumer<GameViewModel>(
+        builder: (context, gameViewModel, child) {
+          return Scaffold(
+            backgroundColor: const Color(0xFFF8F9FA), // Cool, soft white background
+            body: LayoutBuilder(
+              builder: (context, constraints) {
+                // Calculate sizes based on screen constraints
+                final screenSize = (constraints.maxWidth < constraints.maxHeight
+                        ? constraints.maxWidth
+                        : constraints.maxHeight) * 0.85;
+                
+                // Make all boards the same size
+                final boardSize = screenSize * 0.15; // All boards same size
+                final mainBoardSize = boardSize * 2; // Main board is larger
+                
+                return Consumer<GameViewModel>(
+                  builder: (context, gameViewModel, child) {
+                    return AnimatedBuilder(
+                      animation: gameViewModel.animationViewModel,
+                      builder: (context, child) {
+                        final animationViewModel = gameViewModel.animationViewModel;
+                        final isEmerging = animationViewModel.isEmerging;
+                        final isFloating = animationViewModel.isFloating;
+                        final emergenceScale = animationViewModel.emergenceScaleAnimation.value;
+                        
+                        return Stack(
+                          children: [
+                            // Background dimming overlay
+                            if (animationViewModel.isDimming)
+                              Positioned.fill(
+                                child: Container(
+                                  color: Colors.black.withOpacity(
+                                    animationViewModel.isFinalUndimming 
+                                      ? animationViewModel.dimmingAnimation.value * animationViewModel.finalUndimAnimation.value
+                                      : animationViewModel.dimmingAnimation.value
+                                  ),
+                                ),
+                              ),
+                            
+                            // Main game area - boards (main board will be dimmed by overlay above)
+                            Center(
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  // Main board with pulse, shrink, and scale-up animations (invisible during dimming, visible during return)
+                                  Opacity(
+                                    opacity: (animationViewModel.isDimming && !animationViewModel.isReturning) ? 0.0 : 
+                                            animationViewModel.isReturning ? animationViewModel.returnAnimation.value : 1.0,
+                                    child: Transform.scale(
+                                      scale: _getMainBoardScale(animationViewModel),
+                                      child: MainBoard(
+                                        size: mainBoardSize,
+                                      ),
+                                    ),
+                                  ),
+                                  
+                                  // Ghost boards (stay undimmed - rendered after dimming overlay)
+                                  if (!gameViewModel.isPlayerTurn) ...[
+                                    Transform.scale(
+                                      scale: animationViewModel.ghostForwardAnimation.value,
+                                      child: _buildGhostBoardOutline(
+                                        mainBoardSize: mainBoardSize,
+                                        ghostBoardSize: boardSize,
+                                        gameViewModel: gameViewModel,
+                                        emergenceScale: emergenceScale,
+                                        emergenceOpacity: animationViewModel.emergenceOpacityAnimation.value,
+                                        floatingOffset: isFloating ? animationViewModel.getFloatingOffset() : 0.0,
+                                        columnArrangementProgress: animationViewModel.columnArrangementAnimation.value,
+                                        isArranging: animationViewModel.isArranging,
+                                        winnerPulseIntensity: animationViewModel.winnerPulseAnimation.value,
+                                        isPulsing: animationViewModel.isPulsing,
+                                        returnProgress: animationViewModel.returnAnimation.value,
+                                        isReturning: animationViewModel.isReturning,
+                                        finalMergeProgress: animationViewModel.finalMergeAnimation.value,
+                                        isFinalMerging: animationViewModel.isFinalMerging,
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                             ),
-                          ),
-                        
-                        // Main game area - boards (main board will be dimmed by overlay above)
-                        Center(
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              // Main board with pulse, shrink, and scale-up animations (invisible during dimming, visible during return)
-                              Opacity(
-                                opacity: (animationViewModel.isDimming && !animationViewModel.isReturning) ? 0.0 : 
-                                        animationViewModel.isReturning ? animationViewModel.returnAnimation.value : 1.0,
-                                child: Transform.scale(
-                                  scale: _getMainBoardScale(animationViewModel),
-                                  child: MainBoard(
-                                    size: mainBoardSize,
+                            
+                            // Change Rules button - always at bottom, separate from game elements
+                            Positioned(
+                              bottom: 24,
+                              left: 0,
+                              right: 0,
+                              child: Center(
+                                child: TextButton(
+                                  onPressed: () {
+                                    // TODO: Implement rule changes
+                                  },
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: Theme.of(context).colorScheme.primary,
+                                    backgroundColor: Colors.white.withOpacity(0.9),
+                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(25),
+                                    ),
+                                    elevation: 4,
+                                  ),
+                                  child: const Text(
+                                    'Change Rules',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
                                   ),
                                 ),
                               ),
-                              
-                              // Ghost boards (stay undimmed - rendered after dimming overlay)
-                              if (!gameViewModel.isPlayerTurn) ...[
-                                Transform.scale(
-                                  scale: animationViewModel.ghostForwardAnimation.value,
-                                  child: _buildGhostBoardOutline(
-                                    mainBoardSize: mainBoardSize,
-                                    ghostBoardSize: boardSize,
-                                    gameViewModel: gameViewModel,
-                                    emergenceScale: emergenceScale,
-                                    emergenceOpacity: animationViewModel.emergenceOpacityAnimation.value,
-                                    floatingOffset: isFloating ? animationViewModel.getFloatingOffset() : 0.0,
-                                    columnArrangementProgress: animationViewModel.columnArrangementAnimation.value,
-                                    isArranging: animationViewModel.isArranging,
-                                    winnerPulseIntensity: animationViewModel.winnerPulseAnimation.value,
-                                    isPulsing: animationViewModel.isPulsing,
-                                    returnProgress: animationViewModel.returnAnimation.value,
-                                    isReturning: animationViewModel.isReturning,
-                                    finalMergeProgress: animationViewModel.finalMergeAnimation.value,
-                                    isFinalMerging: animationViewModel.isFinalMerging,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        
-
-                
-                // Change Rules button - always at bottom, separate from game elements
-                Positioned(
-                  bottom: 24,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: TextButton(
-                      onPressed: () {
-                        // TODO: Implement rule changes
+                            ),
+                          ],
+                        );
                       },
-                      style: TextButton.styleFrom(
-                        foregroundColor: Theme.of(context).colorScheme.primary,
-                        backgroundColor: Colors.white.withOpacity(0.9),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(25),
-                        ),
-                        elevation: 4,
-                      ),
-                      child: const Text(
-                        'Change Rules',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  ),
-                        ),
-                      ],
                     );
                   },
                 );
               },
-            );
-          },
-        ),
+            ),
+          );
+        },
       ),
     );
   }

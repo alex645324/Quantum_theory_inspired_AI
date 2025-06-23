@@ -20,6 +20,13 @@ class GameViewModel extends ChangeNotifier {
   // Quantum-inspired: Animation controller for synchronized pulsing
   late AnimationViewModel _animationViewModel;
   
+  // Debug: Track game cycles and moves
+  int _gameMove = 0;
+  int _gameCycle = 0;
+  
+  // QCI Process state tracking
+  bool _isQciProcessRunning = false;
+  
   // Getter for the current game state
   GameState get gameState => _gameState;
   
@@ -46,6 +53,9 @@ class GameViewModel extends ChangeNotifier {
   
   // Getter for turn state
   bool get isPlayerTurn => _isPlayerTurn;
+  
+  // Getter for QCI process state
+  bool get isQciProcessRunning => _isQciProcessRunning;
 
   // Constructor - initialize with empty game state and quantum mind
   GameViewModel(TickerProvider vsync) : _gameState = GameState() {
@@ -74,6 +84,9 @@ class GameViewModel extends ChangeNotifier {
   void resetReality() {
     _gameState = GameState();
     _isPlayerTurn = true; // Start with player turn
+    _gameMove = 0;
+    _gameCycle = 0;
+    _isQciProcessRunning = false; // Reset QCI process flag
     _animationViewModel.stopAnimations(); // Stop any ongoing animations
     _updateQuantumSuperposition();
     notifyListeners();
@@ -86,50 +99,65 @@ class GameViewModel extends ChangeNotifier {
 
   // Quantum-inspired: Collapse a player's move into the current reality
   Future<void> collapsePlayerMove(int row, int col) async {
-    // Only allow moves during player turn
+    print('DEBUG: QCI RESTART - collapsePlayerMove called (Cycle: $_gameCycle, Move: $_gameMove)');
+    
+    // Don't allow moves if animations are still running
+    if (_animationViewModel.isAnimating) {
+      print('DEBUG: Move rejected - animations still in progress');
+      return;
+    }
+    
+    // Simple state check - only allow moves during player turn
     if (!_isPlayerTurn) {
       print('DEBUG: Move rejected - not player turn');
-      return; // Not player's turn
+      return;
     }
     
     // Validate the move
     if (!isValidMove(row, col)) {
-      print('DEBUG: Move rejected - invalid position ($row, $col)');
-      return; // Invalid move, do nothing
+      print('DEBUG: Move rejected - invalid position');
+      return;
     }
     
-    print('DEBUG: Valid move at ($row, $col) - starting quantum sequence');
-    
-    // Apply the move to the game state
+    // Apply player's move
     _gameState = _gameState.makeMove(row, col);
-    print('DEBUG: Game state updated with player move');
+    _gameMove++;
     
-    // Switch to quantum processing phase
+    // Check for game over after player move
+    if (_gameState.isGameOver) {
+      print('DEBUG: Game over after player move');
+      notifyListeners();
+      return;
+    }
+    
+    // Start QCI sequence
     _isPlayerTurn = false;
-    print('DEBUG: Switched to quantum processing phase');
+    _isQciProcessRunning = true;
+    print('DEBUG: Starting QCI sequence');
     
-    // Update the quantum superposition with the new game state
+    // Update quantum state
     _updateQuantumSuperposition();
-    print('DEBUG: Quantum superposition updated');
-    
-    // Show ghost boards during quantum processing
     _quantumMind.showGhostBoards();
-    print('DEBUG: Ghost boards visibility set to: ${_quantumMind.isVisible}');
-    print('DEBUG: Number of ghost boards: ${_quantumMind.ghostBoards.length}');
-    
-    // Notify listeners immediately to show the player's move
     notifyListeners();
-    print('DEBUG: Notified listeners of state change');
     
-    // Wait for 1 second before starting the emergence sequence
-    print('DEBUG: Starting 1-second pause');
-    await Future.delayed(const Duration(seconds: 1));
-    print('DEBUG: Pause completed');
-    
-    // Start the emergence sequence
-    print('DEBUG: Starting emergence sequence');
-    await _animationViewModel.startEmergenceSequence();
-    print('DEBUG: Emergence sequence completed');
+    try {
+      // Start animations
+      await Future.delayed(const Duration(seconds: 1));
+      await _animationViewModel.startEmergenceSequence();
+      
+      // Start deliberation if still in QCI phase
+      if (!_gameState.isGameOver) {
+        await Future.delayed(Duration(milliseconds: _animationViewModel.settings.deliberationDelayDuration));
+        await _animationViewModel.startDeliberationSequence();
+      }
+    } catch (e) {
+      print('DEBUG: Animation error: $e');
+      // Cleanup on error
+      _animationViewModel.stopAnimations();
+      _isQciProcessRunning = false;
+      _isPlayerTurn = true;
+      notifyListeners();
+    }
   }
   
   // Quantum-inspired: Update the quantum superposition
@@ -150,34 +178,32 @@ class GameViewModel extends ChangeNotifier {
     notifyListeners();
   }
   
-  // Handle deliberation sequence completion and make the winning move
+  // Handle deliberation sequence completion
   void _handleDeliberationComplete() {
-    print('DEBUG: Deliberation completed - QCI making winning move');
+    if (_gameState.isGameOver) return;
     
-    // Get the quantum winning position
-    final winningPosition = _quantumMind.getQuantumWinningPosition();
+    print('DEBUG: QCI deliberation complete');
     
-    if (winningPosition != null) {
-      print('DEBUG: QCI making move at position (${winningPosition.row}, ${winningPosition.col})');
-      
-      // Apply the QCI move to the game state
-      _gameState = _gameState.makeMove(winningPosition.row, winningPosition.col);
-      
-      // Hide ghost boards
-      _quantumMind.hideGhostBoards();
-      
-      // Switch back to player turn
-      _isPlayerTurn = true;
-      
-      print('DEBUG: QCI move completed - switched back to player turn');
-      notifyListeners();
-    } else {
-      print('DEBUG: ERROR - No winning position found!');
-      // Fallback: just switch back to player turn
-      _isPlayerTurn = true;
-      _quantumMind.hideGhostBoards();
-      notifyListeners();
+    // Ensure all animations are stopped
+    _animationViewModel.stopAnimations();
+    
+    // Get and apply QCI move
+    final qciMove = _quantumMind.getQuantumWinningPosition();
+    if (qciMove != null) {
+      _gameState = _gameState.makeMove(qciMove.row, qciMove.col);
+      _gameMove++;
     }
+    
+    // Hide ghost boards
+    _quantumMind.hideGhostBoards();
+    
+    // Complete cycle and prepare for next player
+    _gameCycle++;
+    _isQciProcessRunning = false;
+    _isPlayerTurn = !_gameState.isGameOver; // Only allow next player turn if game not over
+    
+    print('DEBUG: QCI cycle complete - Cycle: $_gameCycle, Game Over: ${_gameState.isGameOver}');
+    notifyListeners();
   }
   
   @override
@@ -188,6 +214,6 @@ class GameViewModel extends ChangeNotifier {
 
   @override
   String toString() {
-    return 'GameViewModel(gameState: $_gameState, quantumMind: $_quantumMind, isPlayerTurn: $_isPlayerTurn)';
+    return 'GameViewModel(cycle: $_gameCycle, move: $_gameMove, gameState: $_gameState, quantumMind: $_quantumMind, isPlayerTurn: $_isPlayerTurn)';
   }
 } 

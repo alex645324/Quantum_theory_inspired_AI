@@ -79,7 +79,6 @@ class GhostBoardRing extends StatelessWidget {
                           strategyName: ghostBoard.basisState,
                           phase: phase,
                           magnitude: magnitude,
-                          pulseFactor: animationViewModel.pulseValue,
                         ),
                       ],
                     );

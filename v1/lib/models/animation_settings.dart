@@ -20,6 +20,7 @@ class AnimationSettings {
   // Pause durations between sequences
   final int emergenceDelayDuration;      // milliseconds - delay before emergence
   final int deliberationDelayDuration;   // milliseconds - delay before deliberation starts
+  final int winnerPulseDelayDuration;    // milliseconds - pause after green outline pulse
   final int finalPauseDuration;          // milliseconds - pause before QCI move
   
   const AnimationSettings({
@@ -41,6 +42,7 @@ class AnimationSettings {
     // Pause defaults (current values)
     this.emergenceDelayDuration = 100,      // delay between pulse and emergence
     this.deliberationDelayDuration = 2000,  // delay before deliberation starts
+    this.winnerPulseDelayDuration = 1500,   // pause after green outline pulse
     this.finalPauseDuration = 1000,         // pause before QCI move
   });
   
@@ -59,6 +61,7 @@ class AnimationSettings {
     int? finalMergeDuration,
     int? emergenceDelayDuration,
     int? deliberationDelayDuration,
+    int? winnerPulseDelayDuration,
     int? finalPauseDuration,
   }) {
     return AnimationSettings(
@@ -75,6 +78,7 @@ class AnimationSettings {
       finalMergeDuration: finalMergeDuration ?? this.finalMergeDuration,
       emergenceDelayDuration: emergenceDelayDuration ?? this.emergenceDelayDuration,
       deliberationDelayDuration: deliberationDelayDuration ?? this.deliberationDelayDuration,
+      winnerPulseDelayDuration: winnerPulseDelayDuration ?? this.winnerPulseDelayDuration,
       finalPauseDuration: finalPauseDuration ?? this.finalPauseDuration,
     );
   }

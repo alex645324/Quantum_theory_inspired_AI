@@ -69,6 +69,8 @@ class AnimationViewModel extends ChangeNotifier {
   bool _isFinalUndimming = false;
   bool _isFinalMerging = false;
   
+
+  
   // Getters for animations
   Animation<double> get mainBoardPulseAnimation => _mainBoardPulseAnimation;
   Animation<double> get emergenceScaleAnimation => _emergenceScaleAnimation;
@@ -84,6 +86,10 @@ class AnimationViewModel extends ChangeNotifier {
   Animation<double> get finalMergeAnimation => _finalMergeAnimation;
   Animation<double> get mainBoardScaleUpAnimation => _mainBoardScaleUpAnimation;
   
+  // Legacy compatibility getters for existing components
+  Animation<double> get pulseAnimation => _mainBoardPulseAnimation;
+  double get pulseValue => _mainBoardPulseAnimation.value;
+  
   // State getters
   bool get isEmerging => _isEmerging;
   bool get isFloating => _isFloating;
@@ -95,6 +101,20 @@ class AnimationViewModel extends ChangeNotifier {
   bool get isReturning => _isReturning;
   bool get isFinalUndimming => _isFinalUndimming;
   bool get isFinalMerging => _isFinalMerging;
+  
+  // Overall animation state
+  bool get isAnimating => 
+    isEmerging || 
+    isFloating || 
+    isShrinking || 
+    isDimming || 
+    isMovingForward || 
+    isArranging || 
+    isPulsing || 
+    isReturning || 
+    isFinalUndimming || 
+    isFinalMerging;
+
   
   // Setter for deliberation completion callback
   set onDeliberationComplete(VoidCallback? callback) {
@@ -370,72 +390,90 @@ class AnimationViewModel extends ChangeNotifier {
     print('DEBUG: Starting deliberation sequence - main board shrink');
     _isShrinking = true;
     
-    // Reset animations
-    _mainBoardShrinkController.reset();
-    _dimmingController.reset();
-    _ghostForwardController.reset();
-    _columnArrangementController.reset();
-    _winnerPulseController.reset();
-    _returnController.reset();
-    _finalUndimController.reset();
-    _finalMergeController.reset();
-    
-    // Start main board shrink
-    await _mainBoardShrinkController.forward();
-    print('DEBUG: Main board shrink completed');
-    
-    // Start screen dimming
-    print('DEBUG: Starting screen dimming');
-    _isDimming = true;
-    await _dimmingController.forward();
-    print('DEBUG: Screen dimming completed');
-    
-    // Start ghost boards forward movement
-    print('DEBUG: Starting ghost boards forward movement');
-    _isMovingForward = true;
-    await _ghostForwardController.forward();
-    print('DEBUG: Ghost boards forward movement completed');
-    
-    // Start column arrangement
-    print('DEBUG: Starting column arrangement');
-    _isArranging = true;
-    await _columnArrangementController.forward();
-    print('DEBUG: Column arrangement completed');
-    
-    // Start winner pulse (quantum decision)
-    print('DEBUG: Starting quantum winner determination and pulse');
-    _isPulsing = true;
-    await _winnerPulseController.forward();
-    await _winnerPulseController.reverse();
-    print('DEBUG: Winner pulse completed');
-    
-    // Start return animation (main board un-dim + ghost boards return)
-    print('DEBUG: Starting return animation - main board un-dim and ghost boards return');
-    _isReturning = true;
-    await _returnController.forward();
-    print('DEBUG: Return animation completed');
-    
-    // Start final un-dimming
-    print('DEBUG: Starting final un-dimming - removing all screen dimming');
-    _isFinalUndimming = true;
-    await _finalUndimController.forward();
-    print('DEBUG: Final un-dimming completed - screen fully bright');
-    
-    // Start final merge-back and scale-up
-    print('DEBUG: Starting final merge-back and main board scale-up');
-    _isFinalMerging = true;
-    await _finalMergeController.forward();
-    print('DEBUG: Final merge-back and scale-up completed');
-    
-    // Configurable pause before QCI makes move
-    print('DEBUG: ${_settings.finalPauseDuration}ms pause before QCI makes move');
-    await Future.delayed(Duration(milliseconds: _settings.finalPauseDuration));
-    print('DEBUG: Pause completed - ready for QCI move');
-    
+    try {
+      // Reset animations
+      _mainBoardShrinkController.reset();
+      _dimmingController.reset();
+      _ghostForwardController.reset();
+      _columnArrangementController.reset();
+      _winnerPulseController.reset();
+      _returnController.reset();
+      _finalUndimController.reset();
+      _finalMergeController.reset();
+      
+      // Start main board shrink
+      await _mainBoardShrinkController.forward();
+      print('DEBUG: Main board shrink completed');
+      
+      // Start screen dimming
+      print('DEBUG: Starting screen dimming');
+      _isDimming = true;
+      await _dimmingController.forward();
+      print('DEBUG: Screen dimming completed');
+      
+      // Start ghost boards forward movement
+      print('DEBUG: Starting ghost boards forward movement');
+      _isMovingForward = true;
+      await _ghostForwardController.forward();
+      print('DEBUG: Ghost boards forward movement completed');
+      
+      // Start column arrangement
+      print('DEBUG: Starting column arrangement');
+      _isArranging = true;
+      await _columnArrangementController.forward();
+      print('DEBUG: Column arrangement completed');
+      
+      // Start winner pulse (quantum decision)
+      print('DEBUG: Starting quantum winner determination and pulse');
+      _isPulsing = true;
+      await _winnerPulseController.forward();
+      await _winnerPulseController.reverse();
+      print('DEBUG: Winner pulse completed');
+      
+      // Configurable pause after green outline pulse
+      print('DEBUG: ${_settings.winnerPulseDelayDuration}ms pause after green outline pulse');
+      await Future.delayed(Duration(milliseconds: _settings.winnerPulseDelayDuration));
+      print('DEBUG: Green outline pulse pause completed');
+      
+      // Start return animation (main board un-dim + ghost boards return)
+      print('DEBUG: Starting return animation - main board un-dim and ghost boards return');
+      _isReturning = true;
+      await _returnController.forward();
+      print('DEBUG: Return animation completed');
+      
+      // Start final un-dimming
+      print('DEBUG: Starting final un-dimming - removing all screen dimming');
+      _isFinalUndimming = true;
+      await _finalUndimController.forward();
+      print('DEBUG: Final un-dimming completed - screen fully bright');
+      
+      // Start final merge-back and scale-up
+      print('DEBUG: Starting final merge-back and main board scale-up');
+      _isFinalMerging = true;
+      await _finalMergeController.forward();
+      print('DEBUG: Final merge-back and scale-up completed');
+      
+      // Configurable pause before QCI makes move
+      print('DEBUG: ${_settings.finalPauseDuration}ms pause before QCI makes move');
+      await Future.delayed(Duration(milliseconds: _settings.finalPauseDuration));
+      print('DEBUG: Pause completed - ready for QCI move');
+      
       notifyListeners();
-    
-    // Notify completion - will be handled by GameViewModel
-    _onDeliberationComplete?.call();
+      
+      // Notify completion - will be handled by GameViewModel
+      _onDeliberationComplete?.call();
+    } finally {
+      // Reset all state flags
+      _isShrinking = false;
+      _isDimming = false;
+      _isMovingForward = false;
+      _isArranging = false;
+      _isPulsing = false;
+      _isReturning = false;
+      _isFinalUndimming = false;
+      _isFinalMerging = false;
+      notifyListeners();
+    }
   }
   
   // Stop all animations
@@ -484,6 +522,8 @@ class AnimationViewModel extends ChangeNotifier {
   double getFloatingOffset() {
     return _isFloating ? _floatingAnimation.value * 2.0 : 0.0;
   }
+  
+
   
   @override
   void dispose() {

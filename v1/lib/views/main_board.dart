@@ -50,7 +50,9 @@ class MainBoard extends StatelessWidget {
                     return Expanded(
                       child: GestureDetector(
                         onTap: isValidMove && !isGameOver 
-                            ? () => gameViewModel.collapsePlayerMove(row, col)
+                            ? () {
+                                gameViewModel.collapsePlayerMove(row, col);
+                              }
                             : null,
                         child: Container(
                           decoration: BoxDecoration(
