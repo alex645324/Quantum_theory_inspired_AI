@@ -4,10 +4,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../viewmodels/game_view_model.dart';
-import '../viewmodels/animation_view_model.dart';
+import '../models/game_state.dart';
 import 'main_board.dart';
 import 'ghost_board.dart';
-import 'animation_overlay.dart';
 
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
@@ -17,38 +16,36 @@ class GameScreen extends StatefulWidget {
 }
 
 class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
-  late final GameViewModel _gameViewModel;
-  late final AnimationViewModel _animationViewModel;
-
-  @override
-  void initState() {
-    super.initState();
-    _animationViewModel = AnimationViewModel(this);
-    _gameViewModel = GameViewModel(this, _animationViewModel);
-  }
 
   @override
   void dispose() {
-    _gameViewModel.dispose();
-    _animationViewModel.dispose();
     super.dispose();
+  }
+
+
+  
+  // Calculate main board scale based on current animation state
+  double _getMainBoardScale(animationViewModel) {
+    double baseScale = 1.0 + (animationViewModel.mainBoardPulseAnimation.value * 0.05);
+    
+    if (animationViewModel.isFinalMerging) {
+      // During final merge, use the scale-up animation
+      return baseScale * animationViewModel.mainBoardScaleUpAnimation.value;
+    } else if (animationViewModel.isShrinking) {
+      // During shrinking phase
+      return baseScale * animationViewModel.mainBoardShrinkAnimation.value;
+    } else {
+      // Normal state - just pulse
+      return baseScale;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider.value(value: _gameViewModel),
-        ChangeNotifierProvider.value(value: _animationViewModel),
-      ],
+    return ChangeNotifierProvider(
+      create: (context) => GameViewModel(this),
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('QCI Tic-Tac-Toe'),
-          centerTitle: true,
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          foregroundColor: Theme.of(context).colorScheme.onPrimary,
-          elevation: 2,
-        ),
+        backgroundColor: const Color(0xFFF8F9FA), // Cool, soft white background
         body: LayoutBuilder(
           builder: (context, constraints) {
             // Calculate sizes based on screen constraints
@@ -58,102 +55,124 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             
             // Make all boards the same size
             final boardSize = screenSize * 0.15; // All boards same size
+            final mainBoardSize = boardSize * 2; // Main board is larger
             
-            return Center(
-              child: Consumer<GameViewModel>(
-                builder: (context, gameViewModel, child) {
-                  return Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // Animation overlay (handles connecting lines and effects)
-                      AnimationOverlay(
-                        mainBoardSize: boardSize,
-                        mainBoardCenter: Offset(
-                          constraints.maxWidth / 2,
-                          constraints.maxHeight / 2,
-                        ),
-                        ghostPositions: _calculateGhostPositions(
-                          gameViewModel,
-                          boardSize,
-                          constraints,
-                        ),
-                      ),
-                      
-                      // Ghost boards positioned around main board during QCI's turn
-                      if (!gameViewModel.isPlayerTurn)
-                        _buildGhostBoardOutline(
-                          mainBoardSize: boardSize,
-                          ghostBoardSize: boardSize,
-                          gameViewModel: gameViewModel,
-                          constraints: constraints,
-                        ),
-                      
-                      // Main board (always visible)
-                      MainBoard(
-                        size: boardSize,
-                      ),
-                      
-                      // Placeholder for mutation button (bottom center)
-                      Positioned(
-                        bottom: 24,
-                        child: Container(
-                          width: 64,
-                          height: 64,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Theme.of(context).colorScheme.secondary.withOpacity(0.2),
+            return Consumer<GameViewModel>(
+              builder: (context, gameViewModel, child) {
+                return AnimatedBuilder(
+                  animation: gameViewModel.animationViewModel,
+                  builder: (context, child) {
+                    final animationViewModel = gameViewModel.animationViewModel;
+                    final isEmerging = animationViewModel.isEmerging;
+                    final isFloating = animationViewModel.isFloating;
+                    final emergenceScale = animationViewModel.emergenceScaleAnimation.value;
+                    
+                    // Start deliberation after emergence completes
+                    if (!gameViewModel.isPlayerTurn && emergenceScale >= 1.0 && !animationViewModel.isShrinking) {
+                      Future.delayed(Duration(milliseconds: animationViewModel.settings.deliberationDelayDuration), () {
+                        if (mounted && !animationViewModel.isShrinking) {
+                          animationViewModel.startDeliberationSequence();
+                        }
+                      });
+                    }
+                    
+                                        return Stack(
+                      children: [
+                        // Background dimming overlay
+                        if (animationViewModel.isDimming)
+                          Positioned.fill(
+                            child: Container(
+                              color: Colors.black.withOpacity(
+                                animationViewModel.isFinalUndimming 
+                                  ? animationViewModel.dimmingAnimation.value * animationViewModel.finalUndimAnimation.value
+                                  : animationViewModel.dimmingAnimation.value
+                              ),
+                            ),
                           ),
-                          child: const Center(
-                            child: Icon(Icons.auto_fix_high, size: 32, color: Colors.grey),
+                        
+                        // Main game area - boards (main board will be dimmed by overlay above)
+                        Center(
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              // Main board with pulse, shrink, and scale-up animations (invisible during dimming, visible during return)
+                              Opacity(
+                                opacity: (animationViewModel.isDimming && !animationViewModel.isReturning) ? 0.0 : 
+                                        animationViewModel.isReturning ? animationViewModel.returnAnimation.value : 1.0,
+                                child: Transform.scale(
+                                  scale: _getMainBoardScale(animationViewModel),
+                                  child: MainBoard(
+                                    size: mainBoardSize,
+                                  ),
+                                ),
+                              ),
+                              
+                              // Ghost boards (stay undimmed - rendered after dimming overlay)
+                              if (!gameViewModel.isPlayerTurn) ...[
+                                Transform.scale(
+                                  scale: animationViewModel.ghostForwardAnimation.value,
+                                  child: _buildGhostBoardOutline(
+                                    mainBoardSize: mainBoardSize,
+                                    ghostBoardSize: boardSize,
+                                    gameViewModel: gameViewModel,
+                                    emergenceScale: emergenceScale,
+                                    emergenceOpacity: animationViewModel.emergenceOpacityAnimation.value,
+                                    floatingOffset: isFloating ? animationViewModel.getFloatingOffset() : 0.0,
+                                    columnArrangementProgress: animationViewModel.columnArrangementAnimation.value,
+                                    isArranging: animationViewModel.isArranging,
+                                    winnerPulseIntensity: animationViewModel.winnerPulseAnimation.value,
+                                    isPulsing: animationViewModel.isPulsing,
+                                    returnProgress: animationViewModel.returnAnimation.value,
+                                    isReturning: animationViewModel.isReturning,
+                                    finalMergeProgress: animationViewModel.finalMergeAnimation.value,
+                                    isFinalMerging: animationViewModel.isFinalMerging,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
+                        
+
+                
+                // Change Rules button - always at bottom, separate from game elements
+                Positioned(
+                  bottom: 24,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: TextButton(
+                      onPressed: () {
+                        // TODO: Implement rule changes
+                      },
+                      style: TextButton.styleFrom(
+                        foregroundColor: Theme.of(context).colorScheme.primary,
+                        backgroundColor: Colors.white.withOpacity(0.9),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(25),
+                        ),
+                        elevation: 4,
                       ),
-                    ],
-                  );
-                },
-              ),
+                      child: const Text(
+                        'Change Rules',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                        ),
+                      ],
+                    );
+                  },
+                );
+              },
             );
           },
         ),
       ),
-    );
-  }
-  
-  // Calculate ghost board positions based on animation phase
-  List<Offset> _calculateGhostPositions(
-    GameViewModel gameViewModel,
-    double mainBoardSize,
-    BoxConstraints constraints,
-  ) {
-    final animationViewModel = gameViewModel.animationViewModel;
-    final center = Offset(
-      constraints.maxWidth / 2,
-      constraints.maxHeight / 2,
-    );
-    
-    // Calculate final positions (same as before)
-    final double offset = 48.0;
-    final double totalSize = mainBoardSize + mainBoardSize * 2 + offset * 4;
-    final double mainStart = mainBoardSize + offset * 2;
-    final double mainEnd = mainStart + mainBoardSize;
-    final double centerOffset = mainBoardSize / 2 - mainBoardSize / 2;
-
-    final List<Offset> finalPositions = [
-      Offset(offset, offset), // Top-left
-      Offset(mainStart + centerOffset, offset), // Top-middle
-      Offset(mainEnd + offset, offset), // Top-right
-      Offset(mainEnd + offset, mainStart + centerOffset), // Right-middle
-      Offset(mainEnd + offset, mainEnd + offset), // Bottom-right
-      Offset(mainStart + centerOffset, mainEnd + offset), // Bottom-middle
-      Offset(offset, mainEnd + offset), // Bottom-left
-      Offset(offset, mainStart + centerOffset), // Left-middle
-    ];
-    
-    // Let the AnimationViewModel handle position interpolation
-    return animationViewModel.calculateGhostPositions(
-      center: center,
-      radius: totalSize / 2,
-      finalPositions: finalPositions,
     );
   }
   
@@ -162,64 +181,191 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     required double mainBoardSize,
     required double ghostBoardSize,
     required GameViewModel gameViewModel,
-    required BoxConstraints constraints,
+    required double emergenceScale,
+    required double emergenceOpacity,
+    required double floatingOffset,
+    double columnArrangementProgress = 0.0,
+    bool isArranging = false,
+    double winnerPulseIntensity = 0.0,
+    bool isPulsing = false,
+    double returnProgress = 0.0,
+    bool isReturning = false,
+    double finalMergeProgress = 0.0,
+    bool isFinalMerging = false,
   }) {
     final quantumMind = gameViewModel.quantumMind;
     final ghostBoards = quantumMind.ghostBoards;
-    final positions = _calculateGhostPositions(
-      gameViewModel,
-      mainBoardSize,
-      constraints,
-    );
+    
+    final double offset = 48.0; // Increased gap between boards for better spacing
+    final double totalSize = mainBoardSize + ghostBoardSize * 2 + offset * 4; // Added extra offset for outer padding
+    final double mainStart = ghostBoardSize + offset * 2; // Double offset for outer padding
+    final double mainEnd = mainStart + mainBoardSize;
+    final double centerOffset = mainBoardSize / 2 - ghostBoardSize / 2;
+    
+    // Group ghost boards by their moves for column arrangement
+    Map<String, List<int>> moveGroups = {};
+    Position? quantumWinningPosition;
+    if (isArranging) {
+      for (int i = 0; i < ghostBoards.length; i++) {
+        final move = ghostBoards[i].proposedMove;
+        final moveKey = '${move.position?.row ?? -1}_${move.position?.col ?? -1}';
+        moveGroups[moveKey] = (moveGroups[moveKey] ?? [])..add(i);
+      }
+      
+      // Determine quantum winning position if pulsing
+      if (isPulsing) {
+        quantumWinningPosition = quantumMind.getQuantumWinningPosition();
+      }
+    }
 
-    return SizedBox.expand(
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: List.generate(8, (i) {
-          final ghostBoard = ghostBoards[i];
-          final strategy = quantumMind.getStrategy(i);
-          final pos = positions[i];
-          
-          return Positioned(
-            left: pos.dx,
-            top: pos.dy,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  strategy?.basisState ?? 'Ghost',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.grey.withOpacity(0.7),
-                    fontWeight: FontWeight.bold,
+    // 8 positions: TL, TM, TR, RM, BR, BM, BL, LM (clockwise from top-left)
+    final List<Offset> positions = [
+      // Top-left corner
+      Offset(offset, offset),
+      // Top-middle
+      Offset(mainStart + centerOffset, offset),
+      // Top-right corner
+      Offset(mainEnd + offset, offset),
+      // Right-middle
+      Offset(mainEnd + offset, mainStart + centerOffset),
+      // Bottom-right corner
+      Offset(mainEnd + offset, mainEnd + offset),
+      // Bottom-middle
+      Offset(mainStart + centerOffset, mainEnd + offset),
+      // Bottom-left corner
+      Offset(offset, mainEnd + offset),
+      // Left-middle
+      Offset(offset, mainStart + centerOffset),
+    ];
+
+    return Align(
+      alignment: Alignment.center,
+      child: SizedBox(
+        width: totalSize,
+        height: totalSize,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: List.generate(8, (i) {
+            final pos = positions[i];
+            final ghostBoard = ghostBoards[i];
+            final strategy = quantumMind.getStrategy(i);
+            
+            // Calculate emergence position (start from center)
+            final centerX = totalSize / 2 - ghostBoardSize / 2;
+            final centerY = totalSize / 2 - ghostBoardSize / 2;
+            final targetX = pos.dx;
+            final targetY = pos.dy;
+            
+            double currentX = centerX + (targetX - centerX) * emergenceScale;
+            double currentY = centerY + (targetY - centerY) * emergenceScale;
+            
+            // Row arrangement positioning
+            if (isArranging && columnArrangementProgress > 0) {
+              final move = ghostBoard.proposedMove;
+              final moveKey = '${move.position?.row ?? -1}_${move.position?.col ?? -1}';
+              final groupMembers = moveGroups[moveKey] ?? [];
+              final indexInGroup = groupMembers.indexOf(i);
+              final groupIndex = moveGroups.keys.toList().indexOf(moveKey);
+              
+              // Calculate row position
+              final rowsCount = moveGroups.length;
+              final rowHeight = totalSize / (rowsCount + 1);
+              final rowY = (groupIndex + 1) * rowHeight - ghostBoardSize / 2;
+              final rowX = centerX + (indexInGroup - (groupMembers.length - 1) / 2) * (ghostBoardSize + 20);
+              
+              // Store final row positions
+              final finalRowX = rowX;
+              final finalRowY = rowY;
+              
+              // If returning, interpolate from row back to original position
+              if (isReturning && returnProgress > 0) {
+                currentX = finalRowX + (currentX - finalRowX) * returnProgress;
+                currentY = finalRowY + (currentY - finalRowY) * returnProgress;
+              } else {
+                // Normal arrangement: interpolate to row position
+                currentX = currentX + (rowX - currentX) * columnArrangementProgress;
+                currentY = currentY + (rowY - currentY) * columnArrangementProgress;
+              }
+            }
+            
+            // Final merge: ghost boards move toward the main board position (merge back into main board)
+            if (isFinalMerging) {
+              // Calculate the main board's current position (always centered)
+              final mainBoardX = centerX;
+              final mainBoardY = centerY;
+              
+              // finalMergeProgress goes from 1.0 (original positions) to 0.0 (merged to center)
+              // So as finalMergeProgress decreases, ghost boards should move closer to center
+              // Use (1.0 - finalMergeProgress) to get merge progress from 0.0 to 1.0
+              final actualMergeProgress = 1.0 - finalMergeProgress;
+              
+              // Interpolate from current position toward main board center
+              currentX = currentX + (mainBoardX - currentX) * actualMergeProgress;
+              currentY = currentY + (mainBoardY - currentY) * actualMergeProgress;
+            }
+            
+            // Enhanced scale effect for "emerging from behind"
+            final enhancedScale = emergenceScale * 0.8 + 0.2; // Start smaller, scale up more dramatically
+            
+            // Check if this board is in the winning row (quantum determination)
+            final isInWinningRow = isPulsing && 
+                quantumWinningPosition != null && 
+                ghostBoard.proposedMove.position?.row == quantumWinningPosition!.row && 
+                ghostBoard.proposedMove.position?.col == quantumWinningPosition!.col;
+            
+            // Calculate opacity for final merge (fade out during merge)
+            double finalOpacity = emergenceOpacity;
+            if (isFinalMerging) {
+              // finalMergeProgress goes from 1.0 to 0.0 during the animation
+              // We want ghost boards to fade out as they merge, so use finalMergeProgress directly
+              // When finalMergeProgress = 1.0 (start) → full opacity
+              // When finalMergeProgress = 0.0 (end) → zero opacity (fully faded)
+              finalOpacity = emergenceOpacity * finalMergeProgress;
+            }
+            
+            Widget ghostBoardWidget = GhostBoard(
+              board: _createBoardWithSuggestion(gameViewModel.board, ghostBoard.proposedMove),
+              size: ghostBoardSize,
+              opacity: finalOpacity,
+              strategyName: strategy?.basisState ?? 'Ghost',
+              phase: ghostBoard.proposedMove.amplitude.phase,
+              magnitude: ghostBoard.proposedMove.amplitude.magnitude,
+              scale: 1.0, // Remove the scale from GhostBoard since we're handling it here
+              floatingOffset: floatingOffset,
+              showLabel: emergenceScale > 0.9, // Only show label near final position
+            );
+            
+            // Add green outline pulse effect for winning row
+            if (isInWinningRow && winnerPulseIntensity > 0) {
+              ghostBoardWidget = Container(
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: Colors.green.withOpacity(winnerPulseIntensity),
+                    width: 1.0 + (winnerPulseIntensity * 1.0), // Thinner outline
                   ),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                const SizedBox(height: 2),
-                GhostBoard(
-                  board: _createBoardWithSuggestion(
-                    gameViewModel.board,
-                    ghostBoard.proposedMove,
-                  ),
-                  size: ghostBoardSize,
-                  opacity: 0.6,
-                  strategyName: ghostBoard.basisState,
-                  phase: ghostBoard.proposedMove.amplitude.phase,
-                  magnitude: ghostBoard.proposedMove.amplitude.magnitude,
-                  pulseFactor: gameViewModel.animationViewModel.pulseValue,
-                ),
-              ],
-            ),
-          );
-        }),
+                child: ghostBoardWidget,
+              );
+            }
+            
+            return Positioned(
+              left: currentX,
+              top: currentY,
+              child: Transform.scale(
+                scale: enhancedScale,
+                child: ghostBoardWidget,
+              ),
+            );
+          }),
+        ),
       ),
     );
   }
   
   // Helper method to create a board showing the suggested move
-  List<List<String>> _createBoardWithSuggestion(
-    List<List<String>> currentBoard,
-    dynamic proposedMove,
-  ) {
+  List<List<String>> _createBoardWithSuggestion(List<List<String>> currentBoard, dynamic proposedMove) {
+    // Create a copy of the current board
     final board = List.generate(
       3,
       (row) => List.generate(
@@ -228,6 +374,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ),
     );
     
+    // If there's a valid proposed move, highlight it with a special marker
     if (proposedMove != null && proposedMove.position != null) {
       final pos = proposedMove.position;
       if (pos.row >= 0 && pos.row < 3 && pos.col >= 0 && pos.col < 3) {
