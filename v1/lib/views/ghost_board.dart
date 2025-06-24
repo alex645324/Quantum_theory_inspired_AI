@@ -2,6 +2,7 @@
 // Represents a quantum possibility state
 
 import 'package:flutter/material.dart';
+import '../models/game_state.dart';
 
 class GhostBoard extends StatelessWidget {
   final List<List<String>> board;
@@ -13,6 +14,7 @@ class GhostBoard extends StatelessWidget {
   final double scale;
   final double floatingOffset;
   final bool showLabel;
+  final GameRules rules;
 
   const GhostBoard({
     super.key,
@@ -25,10 +27,13 @@ class GhostBoard extends StatelessWidget {
     this.scale = 1.0,
     this.floatingOffset = 0.0,
     this.showLabel = true,
+    required this.rules,
   });
 
   @override
   Widget build(BuildContext context) {
+    final columns = rules.additionalColumn ? 4 : 3;
+    
     return Transform.translate(
       offset: Offset(0, floatingOffset),
       child: Transform.scale(
@@ -50,7 +55,7 @@ class GhostBoard extends StatelessWidget {
                 const SizedBox(height: 2),
               ],
               Container(
-                width: size,
+                width: size * (columns / 3), // Adjust width for additional column
                 height: size,
                 decoration: BoxDecoration(
                   border: Border.all(
@@ -64,8 +69,11 @@ class GhostBoard extends StatelessWidget {
                   children: List.generate(3, (row) {
                     return Expanded(
                       child: Row(
-                        children: List.generate(3, (col) {
+                        children: List.generate(columns, (col) {
                           final cellValue = board[row][col];
+                          final isCenterPiece = row == 1 && col == 1;
+                          final isCenterDisabled = !rules.centerAvailable && isCenterPiece;
+                          
                           return Expanded(
                             child: Container(
                               decoration: BoxDecoration(
@@ -73,6 +81,7 @@ class GhostBoard extends StatelessWidget {
                                   color: Colors.white24,
                                   width: 0.5,
                                 ),
+                                color: isCenterDisabled ? Colors.black26 : null,
                               ),
                               child: Center(
                                 child: Text(
@@ -80,7 +89,7 @@ class GhostBoard extends StatelessWidget {
                                   style: TextStyle(
                                     fontSize: size * 0.2,
                                     fontWeight: FontWeight.bold,
-                                    color: _getCellColor(cellValue),
+                                    color: _getCellColor(cellValue, isCenterDisabled),
                                   ),
                                 ),
                               ),
@@ -99,7 +108,10 @@ class GhostBoard extends StatelessWidget {
     );
   }
 
-  Color _getCellColor(String cell) {
+  Color _getCellColor(String cell, bool isCenterDisabled) {
+    if (isCenterDisabled) {
+      return Colors.white12;
+    }
     switch (cell) {
       case 'X':
         return Colors.blue.withOpacity(0.7);

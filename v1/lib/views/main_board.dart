@@ -20,9 +20,11 @@ class MainBoard extends StatelessWidget {
       builder: (context, gameViewModel, child) {
         final board = gameViewModel.board;
         final isGameOver = gameViewModel.isGameOver;
+        final rules = gameViewModel.gameState.rules;
+        final columns = rules.additionalColumn ? 4 : 3;
         
         return Container(
-          width: size,
+          width: size * (columns / 3), // Adjust width for additional column while maintaining cell size
           height: size,
           decoration: BoxDecoration(
             border: Border.all(
@@ -43,13 +45,15 @@ class MainBoard extends StatelessWidget {
             children: List.generate(3, (row) {
               return Expanded(
                 child: Row(
-                  children: List.generate(3, (col) {
+                  children: List.generate(columns, (col) {
                     final cellValue = board[row][col];
                     final isValidMove = gameViewModel.isValidMove(row, col);
+                    final isCenterPiece = row == 1 && col == 1;
+                    final isCenterDisabled = !rules.centerAvailable && isCenterPiece;
                     
                     return Expanded(
                       child: GestureDetector(
-                        onTap: isValidMove && !isGameOver 
+                        onTap: isValidMove && !isGameOver && !isCenterDisabled
                             ? () {
                                 gameViewModel.collapsePlayerMove(row, col);
                               }
@@ -60,9 +64,11 @@ class MainBoard extends StatelessWidget {
                               color: Colors.white24,
                               width: 0.5,
                             ),
-                            color: isValidMove && !isGameOver 
-                                ? Colors.white10
-                                : Colors.transparent,
+                            color: isCenterDisabled
+                                ? Colors.black26 // Darker background for disabled center
+                                : isValidMove && !isGameOver 
+                                    ? Colors.white10
+                                    : Colors.transparent,
                           ),
                           child: Center(
                             child: Text(
@@ -70,7 +76,7 @@ class MainBoard extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: size * 0.2,
                                 fontWeight: FontWeight.bold,
-                                color: _getCellColor(cellValue),
+                                color: _getCellColor(cellValue, isCenterDisabled),
                               ),
                             ),
                           ),
@@ -88,7 +94,10 @@ class MainBoard extends StatelessWidget {
   }
 
   // Get color for cell content
-  Color _getCellColor(String cell) {
+  Color _getCellColor(String cell, bool isCenterDisabled) {
+    if (isCenterDisabled) {
+      return Colors.white12; // Very transparent for disabled center
+    }
     switch (cell) {
       case 'X':
         return Colors.blue;

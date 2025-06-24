@@ -2,7 +2,7 @@
 // Represents the current state of the game board and rules
 
 class GameState {
-  // Quantum-inspired: The "reality" board state (3x3 grid)
+  // Quantum-inspired: The "reality" board state (3x3 or 3x4 grid)
   final List<List<String>> board;
   
   // Current player making the move ('X' or 'O')
@@ -20,12 +20,13 @@ class GameState {
     this.currentPlayer = 'X',
     this.gameStatus = 'playing',
     GameRules? rules,
-  })  : board = board ?? _createEmptyBoard(),
+  })  : board = board ?? _createEmptyBoard(rules?.additionalColumn ?? false),
         rules = rules ?? const GameRules();
   
-  // Create empty 3x3 board
-  static List<List<String>> _createEmptyBoard() {
-    return List.generate(3, (_) => List.filled(3, ''));
+  // Create empty board based on rules
+  static List<List<String>> _createEmptyBoard(bool additionalColumn) {
+    final columns = additionalColumn ? 4 : 3;
+    return List.generate(3, (_) => List.filled(columns, ''));
   }
   
   // Copy with modifications (immutable pattern)
@@ -68,46 +69,88 @@ class GameState {
   
   // Check if game is won, drawn, or still playing
   String _checkGameStatus(List<List<String>> board) {
-    // Check rows, columns, and diagonals for win
-    for (int i = 0; i < 3; i++) {
-      // Check rows
-      if (board[i][0].isNotEmpty && 
-          board[i][0] == board[i][1] && 
-          board[i][1] == board[i][2]) {
+    final columns = rules.additionalColumn ? 4 : 3;
+    
+    // Check rows for win
+    for (int row = 0; row < 3; row++) {
+      for (int col = 0; col <= columns - rules.winCondition; col++) {
+        bool isWin = true;
+        for (int i = 0; i < rules.winCondition - 1; i++) {
+          if (board[row][col + i].isEmpty || board[row][col + i] != board[row][col + i + 1]) {
+            isWin = false;
+            break;
+          }
+        }
+        if (isWin) return 'won';
+      }
+    }
+    
+    // Check columns for win
+    for (int col = 0; col < columns; col++) {
+      if (board[0][col].isNotEmpty && 
+          board[0][col] == board[1][col] && 
+          board[1][col] == board[2][col]) {
+        return 'won';
+      }
+    }
+    
+    // Check diagonals for win (only if they can fit the win condition)
+    if (!rules.additionalColumn || rules.winCondition == 3) {
+      // Main diagonal
+      if (board[0][0].isNotEmpty && 
+          board[0][0] == board[1][1] && 
+          board[1][1] == board[2][2]) {
         return 'won';
       }
       
-      // Check columns
-      if (board[0][i].isNotEmpty && 
-          board[0][i] == board[1][i] && 
-          board[1][i] == board[2][i]) {
+      // Secondary diagonal
+      if (board[0][2].isNotEmpty && 
+          board[0][2] == board[1][1] && 
+          board[1][1] == board[2][0]) {
         return 'won';
       }
     }
     
-    // Check diagonals
-    if (board[0][0].isNotEmpty && 
-        board[0][0] == board[1][1] && 
-        board[1][1] == board[2][2]) {
-      return 'won';
-    }
-    
-    if (board[0][2].isNotEmpty && 
-        board[0][2] == board[1][1] && 
-        board[1][1] == board[2][0]) {
-      return 'won';
+    // Additional diagonals for 4th column if present
+    if (rules.additionalColumn) {
+      // Additional main diagonal
+      if (board[0][1].isNotEmpty && 
+          board[0][1] == board[1][2] && 
+          board[1][2] == board[2][3]) {
+        return 'won';
+      }
+      
+      // Additional secondary diagonal
+      if (board[0][3].isNotEmpty && 
+          board[0][3] == board[1][2] && 
+          board[1][2] == board[2][1]) {
+        return 'won';
+      }
     }
     
     // Check for draw (all cells filled)
-    bool isDraw = board.every((row) => row.every((cell) => cell.isNotEmpty));
+    bool isDraw = true;
+    for (int row = 0; row < 3; row++) {
+      for (int col = 0; col < columns; col++) {
+        if (board[row][col].isEmpty && (rules.centerAvailable || row != 1 || col != 1)) {
+          isDraw = false;
+          break;
+        }
+      }
+      if (!isDraw) break;
+    }
     return isDraw ? 'draw' : 'playing';
   }
   
   // Get available moves (empty positions)
   List<Position> getAvailableMoves() {
     List<Position> moves = [];
+    final columns = rules.additionalColumn ? 4 : 3;
+    
     for (int row = 0; row < 3; row++) {
-      for (int col = 0; col < 3; col++) {
+      for (int col = 0; col < columns; col++) {
+        // Skip middle piece if it's not available
+        if (!rules.centerAvailable && row == 1 && col == 1) continue;
         if (board[row][col].isEmpty) {
           moves.add(Position(row, col));
         }
@@ -118,9 +161,11 @@ class GameState {
   
   // Check if position is valid and empty
   bool isValidMove(int row, int col) {
+    final columns = rules.additionalColumn ? 4 : 3;
     return row >= 0 && row < 3 && 
-           col >= 0 && col < 3 && 
-           board[row][col].isEmpty;
+           col >= 0 && col < columns && 
+           board[row][col].isEmpty &&
+           (rules.centerAvailable || row != 1 || col != 1);
   }
   
   // Get winner (if game is won)
@@ -170,11 +215,15 @@ class GameRules {
   // Whether players can reuse previous moves
   final bool allowMoveReuse;
   
+  // Whether the board has an additional column
+  final bool additionalColumn;
+  
   const GameRules({
     this.winCondition = 3,
     this.centerAvailable = true,
     this.wrapEdges = false,
     this.allowMoveReuse = false,
+    this.additionalColumn = false,
   });
   
   GameRules copyWith({
@@ -182,17 +231,19 @@ class GameRules {
     bool? centerAvailable,
     bool? wrapEdges,
     bool? allowMoveReuse,
+    bool? additionalColumn,
   }) {
     return GameRules(
       winCondition: winCondition ?? this.winCondition,
       centerAvailable: centerAvailable ?? this.centerAvailable,
       wrapEdges: wrapEdges ?? this.wrapEdges,
       allowMoveReuse: allowMoveReuse ?? this.allowMoveReuse,
+      additionalColumn: additionalColumn ?? this.additionalColumn,
     );
   }
   
   @override
   String toString() {
-    return 'GameRules(winCondition: $winCondition, centerAvailable: $centerAvailable, wrapEdges: $wrapEdges, allowMoveReuse: $allowMoveReuse)';
+    return 'GameRules(winCondition: $winCondition, centerAvailable: $centerAvailable, wrapEdges: $wrapEdges, allowMoveReuse: $allowMoveReuse, additionalColumn: $additionalColumn)';
   }
 } 

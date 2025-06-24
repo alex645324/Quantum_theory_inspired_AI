@@ -23,6 +23,51 @@ abstract class Strategy {
     final phase = basePhase + variation;
     return ComplexAmplitude(magnitude: magnitude, phase: phase);
   }
+  
+  // Helper to get valid corners based on board rules
+  List<Position> getValidCorners(GameState gameState) {
+    final corners = <Position>[];
+    final maxCol = gameState.rules.additionalColumn ? 3 : 2;
+    
+    // Add all corners
+    corners.add(const Position(0, 0));
+    corners.add(Position(0, maxCol));
+    corners.add(Position(2, 0));
+    corners.add(Position(2, maxCol));
+    
+    return corners;
+  }
+  
+  // Helper to get valid edges based on board rules
+  List<Position> getValidEdges(GameState gameState) {
+    final edges = <Position>[];
+    final maxCol = gameState.rules.additionalColumn ? 3 : 2;
+    
+    // Add all edges
+    edges.add(const Position(0, 1));
+    edges.add(const Position(1, 0));
+    if (gameState.rules.centerAvailable) {
+      edges.add(const Position(1, 1));
+    }
+    edges.add(Position(1, maxCol));
+    edges.add(Position(2, 1));
+    if (gameState.rules.additionalColumn) {
+      edges.add(const Position(0, 2));
+      edges.add(const Position(1, 2));
+      edges.add(const Position(2, 2));
+    }
+    
+    return edges;
+  }
+  
+  // Helper to check if a position is valid under current rules
+  bool isValidPosition(Position pos, GameState gameState) {
+    final maxCol = gameState.rules.additionalColumn ? 3 : 2;
+    
+    return pos.row >= 0 && pos.row <= 2 &&
+           pos.col >= 0 && pos.col <= maxCol &&
+           (gameState.rules.centerAvailable || pos.row != 1 || pos.col != 1);
+  }
 }
 
 // CenterStrategy: Always prioritizes center, then corners, then edges

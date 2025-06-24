@@ -206,6 +206,44 @@ class GameViewModel extends ChangeNotifier {
     notifyListeners();
   }
   
+  // Quantum-inspired: Handle rule changes during gameplay
+  void mutateRules() {
+    // Create new rules with changes
+    final newRules = _gameState.rules.copyWith(
+      additionalColumn: !_gameState.rules.additionalColumn,
+      centerAvailable: false,  // Always remove center piece when rules change
+    );
+    
+    // Update game state with new rules
+    _gameState = GameState(
+      board: _createBoardWithNewRules(_gameState.board, newRules),
+      currentPlayer: _gameState.currentPlayer,
+      gameStatus: _gameState.gameStatus,
+      rules: newRules,
+    );
+    
+    // Update quantum state
+    _updateQuantumSuperposition();
+    notifyListeners();
+  }
+  
+  // Helper to create new board with new rules
+  List<List<String>> _createBoardWithNewRules(List<List<String>> oldBoard, GameRules newRules) {
+    final newColumns = newRules.additionalColumn ? 4 : 3;
+    final List<List<String>> newBoard = List.generate(3, (row) => List.filled(newColumns, ''));
+    
+    // Copy existing moves to new board
+    for (int row = 0; row < 3; row++) {
+      for (int col = 0; col < oldBoard[row].length && col < newColumns; col++) {
+        // Skip middle piece if it's not available in new rules
+        if (!newRules.centerAvailable && row == 1 && col == 1) continue;
+        newBoard[row][col] = oldBoard[row][col];
+      }
+    }
+    
+    return newBoard;
+  }
+  
   @override
   void dispose() {
     _animationViewModel.dispose();

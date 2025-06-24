@@ -6,6 +6,7 @@ import '../models/game_state.dart';
 import '../models/ghost_board.dart';
 import '../models/quantum_move.dart';
 import '../models/strategies.dart';
+import 'dart:math' as math;
 
 class QuantumMind extends ChangeNotifier {
   // Quantum-inspired: The 8 ghost boards in superposition
@@ -85,6 +86,7 @@ class QuantumMind extends ChangeNotifier {
   
   // Quantum-inspired: Update the superposition with new game state
   void updateSuperposition(GameState gameState) {
+    final bool rulesChanged = _didRulesChange(gameState);
     _currentGameState = gameState;
     
     // Update each ghost board with its strategy's suggestion
@@ -92,14 +94,48 @@ class QuantumMind extends ChangeNotifier {
       final strategy = _strategies[i];
       final quantumMove = strategy.suggest(gameState);
       
+      // If rules changed, add a phase shift to represent quantum adaptation
+      ComplexAmplitude adjustedAmplitude = quantumMove.amplitude;
+      if (rulesChanged) {
+        adjustedAmplitude = _applyRuleChangePhaseShift(quantumMove.amplitude);
+      }
+      
       // Create a new ghost board with the updated move
       _ghostBoards[i] = _ghostBoards[i].copyWith(
-        proposedMove: quantumMove,
+        proposedMove: quantumMove.copyWith(
+          amplitude: adjustedAmplitude,
+        ),
       );
     }
     
     // Notify listeners that the superposition has been updated
     notifyListeners();
+  }
+  
+  // Helper to check if rules have changed
+  bool _didRulesChange(GameState newState) {
+    if (_currentGameState == null) return false;
+    
+    final oldRules = _currentGameState!.rules;
+    final newRules = newState.rules;
+    
+    return oldRules.additionalColumn != newRules.additionalColumn ||
+           oldRules.centerAvailable != newRules.centerAvailable ||
+           oldRules.winCondition != newRules.winCondition ||
+           oldRules.wrapEdges != newRules.wrapEdges;
+  }
+  
+  // Apply a phase shift when rules change to represent quantum adaptation
+  ComplexAmplitude _applyRuleChangePhaseShift(ComplexAmplitude amplitude) {
+    // Add a π/4 phase shift to represent quantum adaptation
+    final newPhase = amplitude.phase + math.pi / 4;
+    // Slightly reduce magnitude during adaptation
+    final newMagnitude = amplitude.magnitude * 0.9;
+    
+    return ComplexAmplitude(
+      magnitude: newMagnitude,
+      phase: newPhase,
+    );
   }
   
   // Quantum-inspired: Hide ghost boards (during player turn)

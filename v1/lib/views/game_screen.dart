@@ -12,6 +12,10 @@ import 'ghost_board.dart';
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
 
+  // Static variables for tracking changes
+  static double? _lastMainBoardSize;
+  static double? _lastGhostBoardSize;
+
   @override
   State<GameScreen> createState() => _GameScreenState();
 }
@@ -133,7 +137,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                               child: Center(
                                 child: TextButton(
                                   onPressed: () {
-                                    // TODO: Implement rule changes
+                                    // Call mutateRules when button is pressed
+                                    gameViewModel.mutateRules();
                                   },
                                   style: TextButton.styleFrom(
                                     foregroundColor: Theme.of(context).colorScheme.primary,
@@ -188,12 +193,32 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     final quantumMind = gameViewModel.quantumMind;
     final ghostBoards = quantumMind.ghostBoards;
     
+    // Calculate actual board width for proper spacing
+    final actualBoardWidth = gameViewModel.gameState.rules.additionalColumn 
+        ? ghostBoardSize * (4.0 / 3.0) 
+        : ghostBoardSize;
     final double offset = 48.0; // Increased gap between boards for better spacing
-    final double totalSize = mainBoardSize + ghostBoardSize * 2 + offset * 4; // Added extra offset for outer padding
-    final double mainStart = ghostBoardSize + offset * 2; // Double offset for outer padding
+    final double totalSize = mainBoardSize + actualBoardWidth * 2 + offset * 4; // Use actual board width
+    final double mainStart = actualBoardWidth + offset * 2; // Use actual board width
     final double mainEnd = mainStart + mainBoardSize;
     final double centerOffset = mainBoardSize / 2 - ghostBoardSize / 2;
-    
+
+    // Only print debug info when key size values change
+    if (GameScreen._lastMainBoardSize != mainBoardSize || GameScreen._lastGhostBoardSize != ghostBoardSize) {
+      print('\nDEBUG: Ghost Board Outline Size Changes:');
+      print('  - Main Board Size: $mainBoardSize');
+      print('  - Ghost Board Size: $ghostBoardSize');
+      print('  - Offset (Gap): $offset');
+      print('  - Total Size: $totalSize');
+      print('  - Main Start: $mainStart');
+      print('  - Main End: $mainEnd');
+      print('  - Center Offset: $centerOffset');
+
+      // Update tracked values
+      GameScreen._lastMainBoardSize = mainBoardSize;
+      GameScreen._lastGhostBoardSize = ghostBoardSize;
+    }
+
     // Group ghost boards by their moves for column arrangement
     Map<String, List<int>> moveGroups = {};
     Position? quantumWinningPosition;
@@ -243,7 +268,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             final strategy = quantumMind.getStrategy(i);
             
             // Calculate emergence position (start from center)
-            final centerX = totalSize / 2 - ghostBoardSize / 2;
+            final centerX = totalSize / 2 - actualBoardWidth / 2;
             final centerY = totalSize / 2 - ghostBoardSize / 2;
             final targetX = pos.dx;
             final targetY = pos.dy;
@@ -259,11 +284,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               final indexInGroup = groupMembers.indexOf(i);
               final groupIndex = moveGroups.keys.toList().indexOf(moveKey);
               
-              // Calculate row position
+              // Calculate row position with proper spacing for actual board width
+              final actualBoardWidth = gameViewModel.gameState.rules.additionalColumn 
+                  ? ghostBoardSize * (4.0 / 3.0) 
+                  : ghostBoardSize;
               final rowsCount = moveGroups.length;
               final rowHeight = totalSize / (rowsCount + 1);
               final rowY = (groupIndex + 1) * rowHeight - ghostBoardSize / 2;
-              final rowX = centerX + (indexInGroup - (groupMembers.length - 1) / 2) * (ghostBoardSize + 20);
+              final rowX = centerX + (indexInGroup - (groupMembers.length - 1) / 2) * (actualBoardWidth + 20);
               
               // Store final row positions
               final finalRowX = rowX;
@@ -325,6 +353,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               scale: 1.0, // Remove the scale from GhostBoard since we're handling it here
               floatingOffset: floatingOffset,
               showLabel: emergenceScale > 0.9, // Only show label near final position
+              rules: gameViewModel.gameState.rules,
             );
             
             // Add green outline pulse effect for winning row
@@ -357,11 +386,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   
   // Helper method to create a board showing the suggested move
   List<List<String>> _createBoardWithSuggestion(List<List<String>> currentBoard, dynamic proposedMove) {
+    final columns = currentBoard[0].length; // Get number of columns from current board
+    
     // Create a copy of the current board
     final board = List.generate(
       3,
       (row) => List.generate(
-        3,
+        columns,
         (col) => currentBoard[row][col],
       ),
     );
@@ -369,7 +400,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     // If there's a valid proposed move, highlight it with a special marker
     if (proposedMove != null && proposedMove.position != null) {
       final pos = proposedMove.position;
-      if (pos.row >= 0 && pos.row < 3 && pos.col >= 0 && pos.col < 3) {
+      if (pos.row >= 0 && pos.row < 3 && pos.col >= 0 && pos.col < columns) {
         board[pos.row][pos.col] = proposedMove.player;
       }
     }
