@@ -21,10 +21,57 @@ class GameScreen extends StatefulWidget {
 }
 
 class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
+  
+  // Animation controller for rules changed notification
+  late AnimationController _rulesNotificationController;
+  late Animation<double> _rulesNotificationOpacity;
+  bool _showRulesNotification = false;
+
+  @override
+  void initState() {
+    super.initState();
+    
+    // Initialize rules notification animation
+    _rulesNotificationController = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+    
+    _rulesNotificationOpacity = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _rulesNotificationController,
+      curve: Curves.easeInOut,
+    ));
+  }
 
   @override
   void dispose() {
+    _rulesNotificationController.dispose();
     super.dispose();
+  }
+
+  // Show rules changed notification
+  void _showRulesChangedNotification() {
+    setState(() {
+      _showRulesNotification = true;
+    });
+    
+    _rulesNotificationController.forward().then((_) {
+      // Keep visible for 3 seconds, then fade out
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) {
+          _rulesNotificationController.reverse().then((_) {
+            if (mounted) {
+              setState(() {
+                _showRulesNotification = false;
+              });
+            }
+          });
+        }
+      });
+    });
   }
 
   // Calculate main board scale based on current animation state
@@ -50,7 +97,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       child: Consumer<GameViewModel>(
         builder: (context, gameViewModel, child) {
           return Scaffold(
-            backgroundColor: const Color(0xFFF8F9FA), // Cool, soft white background
+            backgroundColor: const Color(0xFFF2F2F2), // Custom dark gray background
             body: LayoutBuilder(
               builder: (context, constraints) {
                 // Calculate sizes based on screen constraints
@@ -83,6 +130,48 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                                       ? animationViewModel.dimmingAnimation.value * animationViewModel.finalUndimAnimation.value
                                       : animationViewModel.dimmingAnimation.value
                                   ),
+                                ),
+                              ),
+                            
+                            // Rules Changed notification at the top
+                            if (_showRulesNotification)
+                              Positioned(
+                                top: 60,
+                                left: 0,
+                                right: 0,
+                                child: AnimatedBuilder(
+                                  animation: _rulesNotificationOpacity,
+                                  builder: (context, child) {
+                                    return Opacity(
+                                      opacity: _rulesNotificationOpacity.value,
+                                      child: Center(
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 24,
+                                            vertical: 12,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.green.withOpacity(0.9),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withOpacity(0.2),
+                                                blurRadius: 8,
+                                                offset: const Offset(0, 2),
+                                              ),
+                                            ],
+                                          ),
+                                          child: const Text(
+                                            'Rules Changed!',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
                             
@@ -135,25 +224,39 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                               left: 0,
                               right: 0,
                               child: Center(
-                                child: TextButton(
-                                  onPressed: () {
-                                    // Call mutateRules when button is pressed
-                                    gameViewModel.mutateRules();
-                                  },
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: Theme.of(context).colorScheme.primary,
-                                    backgroundColor: Colors.white.withOpacity(0.9),
-                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(25),
-                                    ),
-                                    elevation: 4,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF2F2F2), // Match screen background color
+                                    borderRadius: BorderRadius.circular(8),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.2),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
                                   ),
-                                  child: const Text(
-                                    'Change Rules',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      onTap: () {
+                                        // Call mutateRules when button is pressed
+                                        gameViewModel.mutateRules();
+                                        // Show the rules changed notification
+                                        _showRulesChangedNotification();
+                                      },
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: const Padding(
+                                        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                        child: Text(
+                                          'Change Rules',
+                                          style: TextStyle(
+                                            color: const Color(0xFF9FA1A6), // Custom gray text color
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),

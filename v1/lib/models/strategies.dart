@@ -219,42 +219,75 @@ class DefensiveStrategy extends Strategy {
   // Helper method to find a move that blocks opponent's win
   Position? _findBlockingMove(GameState gameState, String opponent) {
     final board = gameState.board;
+    final columns = gameState.rules.additionalColumn ? 4 : 3;
+    final availableMoves = gameState.getAvailableMoves();
     
     // Check rows
     for (int row = 0; row < 3; row++) {
-      if (_countInRow(board, row, opponent) == 2 && _countInRow(board, row, '') == 1) {
-        for (int col = 0; col < 3; col++) {
-          if (board[row][col].isEmpty) {
-            return Position(row, col);
+      if (_countInRow(board, row, opponent, columns) == 2 && _countInRow(board, row, '', columns) == 1) {
+        for (int col = 0; col < columns; col++) {
+          final position = Position(row, col);
+          if (board[row][col].isEmpty && availableMoves.contains(position)) {
+            return position;
           }
         }
       }
     }
     
     // Check columns
-    for (int col = 0; col < 3; col++) {
+    for (int col = 0; col < columns; col++) {
       if (_countInColumn(board, col, opponent) == 2 && _countInColumn(board, col, '') == 1) {
         for (int row = 0; row < 3; row++) {
-          if (board[row][col].isEmpty) {
-            return Position(row, col);
+          final position = Position(row, col);
+          if (board[row][col].isEmpty && availableMoves.contains(position)) {
+            return position;
           }
         }
       }
     }
     
-    // Check diagonals
-    if (_countInDiagonal(board, opponent, true) == 2 && _countInDiagonal(board, '', true) == 1) {
-      for (int i = 0; i < 3; i++) {
-        if (board[i][i].isEmpty) {
-          return Position(i, i);
+    // Check diagonals (only for standard 3x3 board or when win condition allows)
+    if (!gameState.rules.additionalColumn || gameState.rules.winCondition == 3) {
+      // Main diagonal (0,0) -> (1,1) -> (2,2)
+      if (_countInDiagonal(board, opponent, true) == 2 && _countInDiagonal(board, '', true) == 1) {
+        for (int i = 0; i < 3; i++) {
+          final position = Position(i, i);
+          if (board[i][i].isEmpty && availableMoves.contains(position)) {
+            return position;
+          }
+        }
+      }
+      
+      // Secondary diagonal (0,2) -> (1,1) -> (2,0)
+      if (_countInDiagonal(board, opponent, false) == 2 && _countInDiagonal(board, '', false) == 1) {
+        for (int i = 0; i < 3; i++) {
+          final position = Position(i, 2-i);
+          if (board[i][2-i].isEmpty && availableMoves.contains(position)) {
+            return position;
+          }
         }
       }
     }
     
-    if (_countInDiagonal(board, opponent, false) == 2 && _countInDiagonal(board, '', false) == 1) {
-      for (int i = 0; i < 3; i++) {
-        if (board[i][2-i].isEmpty) {
-          return Position(i, 2-i);
+    // Check additional diagonals for 4-column board
+    if (gameState.rules.additionalColumn) {
+      // Additional main diagonal (0,1) -> (1,2) -> (2,3)
+      if (_countInAdditionalDiagonal(board, opponent, true) == 2 && _countInAdditionalDiagonal(board, '', true) == 1) {
+        final positions = [Position(0, 1), Position(1, 2), Position(2, 3)];
+        for (final position in positions) {
+          if (board[position.row][position.col].isEmpty && availableMoves.contains(position)) {
+            return position;
+          }
+        }
+      }
+      
+      // Additional secondary diagonal (0,3) -> (1,2) -> (2,1)
+      if (_countInAdditionalDiagonal(board, opponent, false) == 2 && _countInAdditionalDiagonal(board, '', false) == 1) {
+        final positions = [Position(0, 3), Position(1, 2), Position(2, 1)];
+        for (final position in positions) {
+          if (board[position.row][position.col].isEmpty && availableMoves.contains(position)) {
+            return position;
+          }
         }
       }
     }
@@ -263,8 +296,12 @@ class DefensiveStrategy extends Strategy {
   }
   
   // Helper methods for counting pieces
-  int _countInRow(List<List<String>> board, int row, String piece) {
-    return board[row].where((cell) => cell == piece).length;
+  int _countInRow(List<List<String>> board, int row, String piece, int columns) {
+    int count = 0;
+    for (int col = 0; col < columns; col++) {
+      if (board[row][col] == piece) count++;
+    }
+    return count;
   }
   
   int _countInColumn(List<List<String>> board, int col, String piece) {
@@ -279,6 +316,23 @@ class DefensiveStrategy extends Strategy {
       } else {
         if (board[i][2-i] == piece) count++;
       }
+    }
+    return count;
+  }
+  
+  // Helper for additional diagonals in 4-column board
+  int _countInAdditionalDiagonal(List<List<String>> board, String piece, bool mainDiagonal) {
+    int count = 0;
+    if (mainDiagonal) {
+      // (0,1) -> (1,2) -> (2,3)
+      if (board[0][1] == piece) count++;
+      if (board[1][2] == piece) count++;
+      if (board[2][3] == piece) count++;
+    } else {
+      // (0,3) -> (1,2) -> (2,1)
+      if (board[0][3] == piece) count++;
+      if (board[1][2] == piece) count++;
+      if (board[2][1] == piece) count++;
     }
     return count;
   }
@@ -363,16 +417,21 @@ class MirrorStrategy extends Strategy {
   Position? _findMirroredMove(GameState gameState) {
     final board = gameState.board;
     final opponent = gameState.currentPlayer == 'X' ? 'O' : 'X';
+    final columns = gameState.rules.additionalColumn ? 4 : 3;
+    final availableMoves = gameState.getAvailableMoves();
     
     // Find opponent's pieces and try to mirror them
     for (int row = 0; row < 3; row++) {
-      for (int col = 0; col < 3; col++) {
+      for (int col = 0; col < columns; col++) {
         if (board[row][col] == opponent) {
-          // Try to mirror across center
-          final mirroredRow = 2 - row;
-          final mirroredCol = 2 - col;
-          if (board[mirroredRow][mirroredCol].isEmpty) {
-            return Position(mirroredRow, mirroredCol);
+          // Try to mirror across center (only works for 3x3 board)
+          if (!gameState.rules.additionalColumn) {
+            final mirroredRow = 2 - row;
+            final mirroredCol = 2 - col;
+            final mirroredPosition = Position(mirroredRow, mirroredCol);
+            if (board[mirroredRow][mirroredCol].isEmpty && availableMoves.contains(mirroredPosition)) {
+              return mirroredPosition;
+            }
           }
         }
       }
@@ -385,27 +444,54 @@ class MirrorStrategy extends Strategy {
   Position? _findPatternMove(GameState gameState) {
     final board = gameState.board;
     final player = gameState.currentPlayer;
+    final columns = gameState.rules.additionalColumn ? 4 : 3;
+    final availableMoves = gameState.getAvailableMoves();
     
     // Look for two of player's pieces in a row/column/diagonal
     // and complete the pattern if possible
     
     // Check rows
     for (int row = 0; row < 3; row++) {
-      if (_countInRow(board, row, player) == 2 && _countInRow(board, row, '') == 1) {
-        for (int col = 0; col < 3; col++) {
-          if (board[row][col].isEmpty) {
-            return Position(row, col);
+      if (_countInRow(board, row, player, columns) == 2 && _countInRow(board, row, '', columns) == 1) {
+        for (int col = 0; col < columns; col++) {
+          final position = Position(row, col);
+          if (board[row][col].isEmpty && availableMoves.contains(position)) {
+            return position;
           }
         }
       }
     }
     
     // Check columns
-    for (int col = 0; col < 3; col++) {
+    for (int col = 0; col < columns; col++) {
       if (_countInColumn(board, col, player) == 2 && _countInColumn(board, col, '') == 1) {
         for (int row = 0; row < 3; row++) {
-          if (board[row][col].isEmpty) {
-            return Position(row, col);
+          final position = Position(row, col);
+          if (board[row][col].isEmpty && availableMoves.contains(position)) {
+            return position;
+          }
+        }
+      }
+    }
+    
+    // Check diagonals (only for standard 3x3 board)
+    if (!gameState.rules.additionalColumn || gameState.rules.winCondition == 3) {
+      // Main diagonal
+      if (_countInDiagonal(board, player, true) == 2 && _countInDiagonal(board, '', true) == 1) {
+        for (int i = 0; i < 3; i++) {
+          final position = Position(i, i);
+          if (board[i][i].isEmpty && availableMoves.contains(position)) {
+            return position;
+          }
+        }
+      }
+      
+      // Secondary diagonal
+      if (_countInDiagonal(board, player, false) == 2 && _countInDiagonal(board, '', false) == 1) {
+        for (int i = 0; i < 3; i++) {
+          final position = Position(i, 2-i);
+          if (board[i][2-i].isEmpty && availableMoves.contains(position)) {
+            return position;
           }
         }
       }
@@ -414,13 +500,29 @@ class MirrorStrategy extends Strategy {
     return null;
   }
   
-  // Helper methods for counting pieces (reused from DefensiveStrategy)
-  int _countInRow(List<List<String>> board, int row, String piece) {
-    return board[row].where((cell) => cell == piece).length;
+  // Helper methods for counting pieces (updated to handle additional columns)
+  int _countInRow(List<List<String>> board, int row, String piece, int columns) {
+    int count = 0;
+    for (int col = 0; col < columns; col++) {
+      if (board[row][col] == piece) count++;
+    }
+    return count;
   }
   
   int _countInColumn(List<List<String>> board, int col, String piece) {
     return board.where((row) => row[col] == piece).length;
+  }
+  
+  int _countInDiagonal(List<List<String>> board, String piece, bool mainDiagonal) {
+    int count = 0;
+    for (int i = 0; i < 3; i++) {
+      if (mainDiagonal) {
+        if (board[i][i] == piece) count++;
+      } else {
+        if (board[i][2-i] == piece) count++;
+      }
+    }
+    return count;
   }
 }
 
